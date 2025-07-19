@@ -11,7 +11,7 @@ const char exit_command[8] = {'M', 'T', 'C', 'S', 'E', 'X', 'I', 'T'};
 class transport_socket_s
 {
 public:
-    transport_socket_s(int local_port, uint16_t stream_id, uint8_t channel_id, char *target_buffer)
+    transport_socket_s(int local_port, uint16_t stream_id, uint8_t channel_id, char *stream_data_buffer)
     {
 
         server_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -31,12 +31,12 @@ public:
             closesocket(server_socket);
             throw std::runtime_error("Socket binding failed");
         }
-        this->target_buffer = target_buffer;
+        this->stream_data_buffer = stream_data_buffer;
         this->stream_id = stream_id;
         this->channel_id = channel_id;
         this->local_port = local_port;
     }
-
+    // recv_map need at least (max_packets + 7) / 8 bytes space
     void start_recv(char *recv_map, uint32_t max_packets)
     {
         while (true)
@@ -58,14 +58,14 @@ public:
             {
                 std::vector<char> MTCS_vector = MTCS_copy(buffer, recv_length);
                 MTCS header = MTCS_header_extract(MTCS_vector);
-                if (recv_length != header.packet_data_length + sizeof(MTCS))
+                if (recv_length != header.packet_data_length + packet_header_length)
                     continue;
                 if (header.target_port != local_port)
                     continue;
                 if ((header.stream_id != stream_id) || (header.channel_id != channel_id))
                     continue;
 
-                MTCS_parse(MTCS_vector, target_buffer);
+                MTCS_parse(MTCS_vector, stream_data_buffer);
 
                 if (header.packet_index < max_packets)
                 {
@@ -86,7 +86,7 @@ private:
     socklen_t client_address_length = sizeof(client_address);
     int recv_length;
     SOCKET server_socket;
-    char *target_buffer;
+    char *stream_data_buffer;
     uint8_t channel_id;
     uint16_t stream_id;
     int local_port;

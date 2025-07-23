@@ -21,12 +21,12 @@ const (
 )
 
 type TCPServer struct {
-	LocalPort      uint16
-	Socket         net.Conn
-	Listener       net.Listener
-	ReadBuffer     []byte
-	LocalUDPPorts  []uint16
-	ClientUDPPorts []uint16
+	LocalPort      uint16       // port for TCP socket
+	Socket         net.Conn     // Socket object
+	Listener       net.Listener // Socket listener
+	ReadBuffer     []byte       // Socket recv buffer
+	LocalUDPPorts  []uint16     // Server Sending UDP from those ports
+	ClientUDPPorts []uint16     // Client Recving UDP from those ports
 }
 
 func (socket *TCPServer) Listen() bool {
@@ -50,14 +50,11 @@ func (socket *TCPServer) Accept() bool {
 	return false
 }
 
-func (socket *TCPServer) Init() bool {
+func (socket *TCPServer) Init(localPort int, LocalUDPPorts []uint16) bool {
+	socket.LocalPort = uint16(localPort)
+	socket.LocalUDPPorts = LocalUDPPorts
 	if !socket.Listen() {
 		log.Println("Init Error: Listen Failed")
-		return false
-	}
-
-	if !socket.Accept() {
-		log.Println("Init Error: Accept Error")
 		return false
 	}
 	return true
@@ -73,16 +70,16 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 	}
 
 	socket.Socket.SetReadDeadline(time.Now().Add(5 * time.Second))
-	data_length, err := socket.Socket.Read(socket.ReadBuffer)
+	dataLength, err := socket.Socket.Read(socket.ReadBuffer)
 
 	// check if the client can understant the server first handshake and being able to send
-	if err != nil || data_length <= 0 {
+	if err != nil || dataLength <= 0 {
 		log.Println("First Handshake Error: Server Receive Failed")
 		return false, 0
 	}
 
 	// check if the reply is correct
-	if !bytes.Equal(socket.ReadBuffer[:data_length], []byte(ClientHandShake)) {
+	if !bytes.Equal(socket.ReadBuffer[:dataLength], []byte(ClientHandShake)) {
 		log.Println("First Handshake Error: Client Response Cannot Be Understand")
 		return false, 0
 	}
@@ -104,34 +101,28 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 
 	// if client does not understant and didn't reply
 	socket.Socket.SetReadDeadline(time.Now().Add(5 * time.Second))
-	data_length, err = socket.Socket.Read(socket.ReadBuffer)
-	if err != nil || data_length <= 0 {
+	dataLength, err = socket.Socket.Read(socket.ReadBuffer)
+	if err != nil || dataLength <= 0 {
 		log.Println("Second Handshake Error: Server Receive Error")
 		return false, 0
 	}
 
 	// if client send back wrong data
-	matched := portPattern.MatchString(string(socket.ReadBuffer[:data_length]))
+	matched := portPattern.MatchString(string(socket.ReadBuffer[:dataLength]))
 	if !matched {
 		log.Println("Second Handshake Error: Client Response Not Valid")
 		return false, 0
 	}
 
 	// if client send back valid UDP ports data
-	for _, port := range strings.Split(string(socket.ReadBuffer[:data_length]), ":") {
-		client_port, err := strconv.ParseUint(port, 10, 16)
-		if err != nil {
+	for _, port := range strings.Split(string(socket.ReadBuffer[:dataLength]), ":") {
+		clientPort, err := strconv.ParseUint(port, 10, 16)
+		if err != nil || clientPort < 1 || clientPort > 65535 {
 			log.Println("Second Handshake Error: Client Ports Not Valid")
 			return false, 0
 		}
 
-		// check if the client port is valid
-		if client_port > 65535 {
-			log.Println("Second Handshake Error: Client Ports Not Valid")
-			return false, 0
-		}
-
-		socket.ClientUDPPorts = append(socket.ClientUDPPorts, uint16(client_port))
+		socket.ClientUDPPorts = append(socket.ClientUDPPorts, uint16(clientPort))
 	}
 
 	// if client send the wrong number of ports
@@ -142,8 +133,8 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 
 	// third handshake, comfirm the size of transformation data and other things like Stream ID
 	streamID := uint16(rand.Uint32())
-	packets_count := uint32(math.Ceil(float64(streamContentLength) / float64(1024)))
-	thirdHandShakeInfo := fmt.Sprintf("%016d%016d%016d", streamID, streamContentLength, packets_count)
+	packetsCount := uint32(math.Ceil(float64(streamContentLength) / float64(1024)))
+	thirdHandShakeInfo := fmt.Sprintf("%016d%016d%016d", streamID, streamContentLength, packetsCount)
 	_, err = socket.Socket.Write([]byte(thirdHandShakeInfo))
 	if err != nil {
 		log.Println("Third Handshake Error: Server Sending Error")
@@ -152,14 +143,14 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 
 	// if client didn't reply
 	socket.Socket.SetReadDeadline(time.Now().Add(5 * time.Second))
-	data_length, err = socket.Socket.Read(socket.ReadBuffer)
-	if err != nil || data_length <= 0 {
+	dataLength, err = socket.Socket.Read(socket.ReadBuffer)
+	if err != nil || dataLength <= 0 {
 		log.Println("Third Handshake Error: Server Recieve Error")
 		return false, 0
 	}
 
 	// if client didn't repeat the content(if client confirm it can process such amount of data, it will send back the info)
-	if !bytes.Equal(socket.ReadBuffer[:data_length], []byte(thirdHandShakeInfo)) {
+	if !bytes.Equal(socket.ReadBuffer[:dataLength], []byte(thirdHandShakeInfo)) {
 		log.Println("Third Handshake Error: Client Response Not Valid")
 		return false, 0
 	}
@@ -177,5 +168,6 @@ func (socket *TCPServer) Read(buffer *[]byte) (length int, err error) {
 }
 
 func (socket *TCPServer) Close() error {
+	socket.Listener.Close()
 	return socket.Socket.Close()
 }

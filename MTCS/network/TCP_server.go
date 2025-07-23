@@ -43,22 +43,24 @@ func (socket *TCPServer) Accept() bool {
 	conn, err := socket.Listener.Accept()
 	if err == nil {
 		socket.Socket = conn
+		socket.ReadBuffer = make([]byte, 1056)
 		return true
 	}
 	log.Println("Accept error")
 	return false
 }
 
-func (socket *TCPServer) Write(data []byte) (length int, err error) {
-	return socket.Socket.Write(data)
-}
+func (socket *TCPServer) Init() bool {
+	if !socket.Listen() {
+		log.Println("Init Error: Listen Failed")
+		return false
+	}
 
-func (socket *TCPServer) Read(buffer *[]byte) (length int, err error) {
-	return socket.Socket.Read(*buffer)
-}
-
-func (socket *TCPServer) Close() error {
-	return socket.Socket.Close()
+	if !socket.Accept() {
+		log.Println("Init Error: Accept Error")
+		return false
+	}
+	return true
 }
 
 func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
@@ -70,7 +72,6 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 		return false, 0
 	}
 
-	socket.ReadBuffer = make([]byte, 1056)
 	socket.Socket.SetReadDeadline(time.Now().Add(5 * time.Second))
 	data_length, err := socket.Socket.Read(socket.ReadBuffer)
 
@@ -111,7 +112,7 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 
 	// if client send back wrong data
 	matched := portPattern.MatchString(string(socket.ReadBuffer[:data_length]))
-	if err != nil || !matched {
+	if !matched {
 		log.Println("Second Handshake Error: Client Response Not Valid")
 		return false, 0
 	}
@@ -158,11 +159,23 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 	}
 
 	// if client didn't repeat the content(if client confirm it can process such amount of data, it will send back the info)
-	if bytes.Compare(socket.ReadBuffer[:data_length], []byte(thirdHandShakeInfo)) != 0 {
+	if !bytes.Equal(socket.ReadBuffer[:data_length], []byte(thirdHandShakeInfo)) {
 		log.Println("Third Handshake Error: Client Response Not Valid")
 		return false, 0
 	}
 
 	// handshake success
 	return true, streamID
+}
+
+func (socket *TCPServer) Write(data []byte) (length int, err error) {
+	return socket.Socket.Write(data)
+}
+
+func (socket *TCPServer) Read(buffer *[]byte) (length int, err error) {
+	return socket.Socket.Read(*buffer)
+}
+
+func (socket *TCPServer) Close() error {
+	return socket.Socket.Close()
 }

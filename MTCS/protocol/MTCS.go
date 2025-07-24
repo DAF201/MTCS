@@ -22,7 +22,7 @@ type MTCS struct {
 	Reserved           [4]byte
 }
 
-func MTCSSeralize(
+func MTCSSerialize(
 	SourcePort, TargetPort, StreamID types.Uint16_t,
 	ChannelID, ResendAttempt types.Uint8_t,
 	StreamPacketsCount types.Uint32_t,

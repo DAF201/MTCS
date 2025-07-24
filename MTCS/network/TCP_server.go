@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"net"
 	"regexp"
@@ -21,16 +20,16 @@ const (
 )
 
 type TCPServer struct {
-	LocalPort      uint16       // port for TCP socket
+	LocalTCPPort      uint16       // port for TCP socket
 	Socket         net.Conn     // Socket object
 	Listener       net.Listener // Socket listener
 	ReadBuffer     []byte       // Socket recv buffer
-	LocalUDPPorts  []uint16     // Server Sending UDP from those ports
-	ClientUDPPorts []uint16     // Client Recving UDP from those ports
+	LocalUDPPorts  []uint16     // Client UDP from those ports
+	ClientUDPPorts []uint16     // Server UDP from those ports
 }
 
 func (socket *TCPServer) Listen() bool {
-	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", socket.LocalPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", socket.LocalTCPPort))
 	if err == nil {
 		socket.Listener = listener
 		return true
@@ -50,17 +49,12 @@ func (socket *TCPServer) Accept() bool {
 	return false
 }
 
-func (socket *TCPServer) Init(localPort int, LocalUDPPorts []uint16) bool {
-	socket.LocalPort = uint16(localPort)
+func (socket *TCPServer) Init(LocalTCPPort int, LocalUDPPorts []uint16) {
+	socket.LocalTCPPort = uint16(LocalTCPPort)
 	socket.LocalUDPPorts = LocalUDPPorts
-	if !socket.Listen() {
-		log.Println("Init Error: Listen Failed")
-		return false
-	}
-	return true
 }
 
-func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
+func (socket *TCPServer) Handshake() (bool, uint16) {
 
 	// first handshake, check if client can receive and understand "MTCS Server Handshake 1"
 	_, err := socket.Socket.Write([]byte(ServerHandShake))
@@ -133,8 +127,7 @@ func (socket *TCPServer) Handshake(streamContentLength uint32) (bool, uint16) {
 
 	// third handshake, comfirm the size of transformation data and other things like Stream ID
 	streamID := uint16(rand.Uint32())
-	packetsCount := uint32(math.Ceil(float64(streamContentLength) / float64(1024)))
-	thirdHandShakeInfo := fmt.Sprintf("%016d%016d%016d", streamID, streamContentLength, packetsCount)
+	thirdHandShakeInfo := fmt.Sprintf("%016d", streamID)
 	_, err = socket.Socket.Write([]byte(thirdHandShakeInfo))
 	if err != nil {
 		log.Println("Third Handshake Error: Server Sending Error")

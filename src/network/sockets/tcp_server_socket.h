@@ -35,6 +35,7 @@ protected:
 
     thread ACCEPT_THREAD;
 
+    mutex connections_list_mutex;
     vector<SOCKET> clients_connections_list;
     queue<socket_pkg> send_queue;
     queue<socket_pkg> recv_queue;
@@ -47,8 +48,15 @@ protected:
 
     atomic<bool> stop_flag;
 
-    void connection_handler()
+    void connection_handler(SOCKET sock)
     {
+        // TODO: do something
+
+        // complete, disconnected
+        auto client_socket = std::find(clients_connections_list.begin(), clients_connections_list.end(), sock);
+        if (client_socket != clients_connections_list.end())
+            clients_connections_list.erase(client_socket);
+        ReleaseSemaphore(connection_sem, 1, NULL);
     }
 
 public:
@@ -90,6 +98,7 @@ public:
         }
 
         printf("Server listening on port %d\n", server_port);
+        ACCEPT_THREAD = thread(&cpp_socket_server::accept_loop, this);
     }
 
     void accept_loop()
@@ -103,7 +112,20 @@ public:
                 printf("Error creating socket\n");
                 continue;
             }
+            lock_guard<mutex> lock(connections_list_mutex);
             clients_connections_list.push_back(sock);
+            thread(&cpp_socket_server::connection_handler, this, sock).detach();
         }
+    }
+    ~cpp_socket_server()
+    {
+        quit();
+        socket_wsa_end();
+    }
+
+    void quit()
+    {
+        stop_flag = true;
+        system("powershell -Command \"& { $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 8000); $client.Close() }\"");
     }
 };

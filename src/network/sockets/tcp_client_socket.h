@@ -124,7 +124,7 @@ public:
         if (client_socket == INVALID_SOCKET)
         {
             printf("Error creating socket\n");
-            WSACleanup();
+            socket_wsa_end();
             throw runtime_error("Socket creation failed");
         }
 
@@ -136,7 +136,7 @@ public:
         {
             printf("Invalid IP address format\n");
             closesocket(client_socket);
-            WSACleanup();
+            socket_wsa_end();
             throw runtime_error("Invalid IP");
         }
 
@@ -144,7 +144,7 @@ public:
         {
             printf("Connect error\n");
             closesocket(client_socket);
-            WSACleanup();
+            socket_wsa_end();
             throw runtime_error("Connect failed");
         }
 

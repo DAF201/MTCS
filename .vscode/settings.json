@@ -9,6 +9,7 @@
         "vector": "cpp",
         "xstring": "cpp",
         "xutility": "cpp",
-        "stdexcept": "cpp"
+        "stdexcept": "cpp",
+        "atomic": "cpp"
     }
 }

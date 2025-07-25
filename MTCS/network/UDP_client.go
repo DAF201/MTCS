@@ -4,3 +4,6 @@ import (
 	"fmt"
 	"net"
 )
+
+type UDPClient struct {
+}

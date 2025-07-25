@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "mutex": "cpp",
+        "deque": "cpp",
+        "format": "cpp",
+        "initializer_list": "cpp",
+        "queue": "cpp",
+        "utility": "cpp",
+        "vector": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp",
+        "stdexcept": "cpp"
+    }
+}

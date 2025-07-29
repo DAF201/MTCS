@@ -102,7 +102,6 @@ protected:
             {
                 char *data_copy = new char[received];
                 memcpy(data_copy, buffer, received);
-
                 {
                     lock_guard<mutex> lock(recv_mutex);
                     recv_queue.push(socket_pkg{data_copy, received});
@@ -211,10 +210,14 @@ public:
         lock_guard<mutex> lock(recv_mutex);
         if (recv_queue.empty())
             return socket_pkg{nullptr, 0};
-
         socket_pkg pkg = recv_queue.front();
         recv_queue.pop();
         return pkg;
+    }
+
+    int recv_buffer_size()
+    {
+        return this->recv_queue.size();
     }
 
     void free_recv(socket_pkg &pkg)
@@ -224,6 +227,29 @@ public:
             delete[] pkg.data;
             pkg.data = nullptr;
             pkg.size = 0;
+        }
+    }
+
+    void quit() noexcept
+    {
+        stop_flag = true;
+        send_cv.notify_all();
+        recv_cv.notify_all();
+        std::scoped_lock lock(send_mutex, recv_mutex);
+        while (!recv_queue.empty())
+        {
+            free_recv(recv_queue.front());
+            recv_queue.pop();
+        }
+        while (!send_queue.empty())
+        {
+            free_recv(send_queue.front());
+            send_queue.pop();
+        }
+        if (client_socket != INVALID_SOCKET)
+        {
+            closesocket(client_socket);
+            client_socket = INVALID_SOCKET;
         }
     }
 };

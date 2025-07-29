@@ -9,6 +9,7 @@
 #include <vector>
 #include <atomic>
 #include <semaphore>
+#include <algorithm>
 #include "socket_setup.h"
 #define MAX_CONNECTIONS_COUNT 8
 #pragma comment(lib, "ws2_32.lib")
@@ -48,14 +49,17 @@ protected:
 
     atomic<bool> stop_flag;
 
+    virtual void connection_handler_func(SOCKET sock) = 0;
+
     void connection_handler(SOCKET sock)
     {
         // TODO: do something
-
+        connection_handler_func(sock);
         // complete, disconnected
         auto client_socket = std::find(clients_connections_list.begin(), clients_connections_list.end(), sock);
         if (client_socket != clients_connections_list.end())
             clients_connections_list.erase(client_socket);
+        closesocket(sock);
         ReleaseSemaphore(connection_sem, 1, NULL);
     }
 
@@ -110,6 +114,7 @@ public:
             if (sock == INVALID_SOCKET)
             {
                 printf("Error creating socket\n");
+                ReleaseSemaphore(connection_sem, 1, NULL);
                 continue;
             }
             lock_guard<mutex> lock(connections_list_mutex);

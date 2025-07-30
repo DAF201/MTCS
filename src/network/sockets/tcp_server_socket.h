@@ -10,18 +10,23 @@
 #include <atomic>
 #include <semaphore>
 #include <algorithm>
+#include "../protocol/MTCS.h"
 #include "socket_setup.h"
+
 #define MAX_CONNECTIONS_COUNT 8
+
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
 
+// semaphore init
 static HANDLE connection_sem = CreateSemaphore(NULL, MAX_CONNECTIONS_COUNT, MAX_CONNECTIONS_COUNT, NULL);
 
 class cpp_socket_server
 {
 
 protected:
+    // packet data
     struct socket_pkg
     {
         char *data = nullptr;
@@ -49,17 +54,21 @@ protected:
 
     atomic<bool> stop_flag;
 
-    virtual void connection_handler_func(SOCKET sock) = 0;
+    // handler need to be implemented by child class
+    virtual void connection_handler(SOCKET sock) = 0;
 
-    void connection_handler(SOCKET sock)
+    void _connection_handler(SOCKET sock)
     {
         // TODO: do something
-        connection_handler_func(sock);
-        // complete, disconnected
+        connection_handler(sock);
+        // complete,remove socket from connection list, disconnected
+        lock_guard<mutex>
+            lock(connections_list_mutex);
         auto client_socket = std::find(clients_connections_list.begin(), clients_connections_list.end(), sock);
         if (client_socket != clients_connections_list.end())
             clients_connections_list.erase(client_socket);
         closesocket(sock);
+        // release semaphore
         ReleaseSemaphore(connection_sem, 1, NULL);
     }
 
@@ -85,6 +94,7 @@ public:
         server_addr.sin_port = htons(server_port);
         server_addr.sin_addr.s_addr = INADDR_ANY;
 
+        // bind listener
         if (bind(server_listener_socket, (sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR)
         {
             printf("Bind failed: %d\n", WSAGetLastError());
@@ -93,6 +103,7 @@ public:
             throw runtime_error("Bind failed");
         }
 
+        // listen
         if (listen(server_listener_socket, SOMAXCONN) == SOCKET_ERROR)
         {
             printf("Listen failed: %d\n", WSAGetLastError());
@@ -102,6 +113,7 @@ public:
         }
 
         printf("Server listening on port %d\n", server_port);
+        // accept connectionsF
         ACCEPT_THREAD = thread(&cpp_socket_server::accept_loop, this);
     }
 
@@ -109,6 +121,7 @@ public:
     {
         while (!stop_flag)
         {
+            // wait for semaphore to ensure the connections at a time is no more then 8
             WaitForSingleObject(connection_sem, INFINITE);
             SOCKET sock = accept(server_listener_socket, nullptr, nullptr);
             if (sock == INVALID_SOCKET)

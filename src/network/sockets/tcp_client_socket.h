@@ -48,7 +48,6 @@ protected:
             unique_lock<mutex> lock(send_mutex);
             send_cv.wait(lock, [this]
                          { return !send_queue.empty() || stop_flag; });
-
             if (stop_flag)
                 break;
 

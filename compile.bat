@@ -1,0 +1,1 @@
+g++ .\src\test\server_test.cpp -o server.exe -lwsock32

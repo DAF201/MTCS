@@ -102,6 +102,40 @@ protected:
         }
     }
 
+    void accept_loop()
+    {
+        while (!stop_flag)
+        {
+            // wait for semaphore to ensure the connections at a time is no more then 8
+            WaitForSingleObject(connection_sem, INFINITE);
+            SOCKET sock = accept(server_listener_socket, nullptr, nullptr);
+            if (sock == INVALID_SOCKET)
+            {
+                printf("Error creating socket\n");
+                ReleaseSemaphore(connection_sem, 1, NULL);
+                continue;
+            }
+            lock_guard<mutex> lock(connections_list_mutex);
+            clients_connections_list.push_back(sock);
+            thread(&cpp_socket_server::_connection_handler, this, sock).detach();
+        }
+    }
+    
+    void quit()
+    {
+        stop_flag = true;
+        lock_guard<mutex> lock(connections_list_mutex);
+        for (auto &sock : clients_connections_list)
+        {
+            shutdown(sock, SD_BOTH);
+            closesocket(sock);
+        }
+        clients_connections_list.clear();
+        system("powershell -Command \"& { $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 8000); $client.Close() }\"");
+        ACCEPT_THREAD.join();
+        SEND_THREAD.join();
+    }
+
 public:
     cpp_socket_server(const int server_port) : stop_flag(false)
     {
@@ -150,25 +184,6 @@ public:
         SEND_THREAD = thread(&cpp_socket_server::send_loop, this);
     }
 
-    void accept_loop()
-    {
-        while (!stop_flag)
-        {
-            // wait for semaphore to ensure the connections at a time is no more then 8
-            WaitForSingleObject(connection_sem, INFINITE);
-            SOCKET sock = accept(server_listener_socket, nullptr, nullptr);
-            if (sock == INVALID_SOCKET)
-            {
-                printf("Error creating socket\n");
-                ReleaseSemaphore(connection_sem, 1, NULL);
-                continue;
-            }
-            lock_guard<mutex> lock(connections_list_mutex);
-            clients_connections_list.push_back(sock);
-            thread(&cpp_socket_server::_connection_handler, this, sock).detach();
-        }
-    }
-
     void send_packet(char *data, int size, SOCKET client_socket)
     {
         char *buffer = new char[size];
@@ -180,17 +195,9 @@ public:
         send_cv.notify_one();
     }
 
-    ~cpp_socket_server()
+    virtual ~cpp_socket_server()
     {
         quit();
         socket_wsa_end();
-    }
-
-    void quit()
-    {
-        stop_flag = true;
-        system("powershell -Command \"& { $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 8000); $client.Close() }\"");
-        ACCEPT_THREAD.join();
-        SEND_THREAD.join();
     }
 };

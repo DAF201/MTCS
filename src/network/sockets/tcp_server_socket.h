@@ -57,11 +57,8 @@ protected:
     atomic<bool> stop_flag;
 
     // handler need to be implemented by child class
-    void connection_handler(SOCKET sock, char *buffer, int size)
-    {
+    virtual void connection_handler(SOCKET sock, char *buffer, int size) {
         // child class can override this part if needed
-        printf("%s\n", buffer);
-        send_packet(buffer, size, sock);
     };
 
     void _connection_handler(SOCKET sock)
@@ -112,7 +109,7 @@ protected:
         ReleaseSemaphore(connection_sem, 1, NULL);
     }
 
-    void send_loop()
+    void _send_loop()
     {
         // sending packet loop
         while (!stop_flag)
@@ -143,7 +140,7 @@ protected:
         }
     }
 
-    void accept_loop()
+    void _accept_loop()
     {
         while (!stop_flag)
         {
@@ -160,20 +157,6 @@ protected:
             clients_connections_list.push_back(sock);
             thread(&cpp_socket_server::_connection_handler, this, sock).detach();
         }
-    }
-
-    void quit()
-    {
-        lock_guard<mutex> lock(connections_list_mutex);
-        for (auto &sock : clients_connections_list)
-        {
-            shutdown(sock, SD_BOTH);
-            closesocket(sock);
-        }
-        clients_connections_list.clear();
-        system("powershell -Command \"& { $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 8000); $client.Close() }\"");
-        ACCEPT_THREAD.join();
-        SEND_THREAD.join();
     }
 
 public:
@@ -217,17 +200,17 @@ public:
         }
     }
 
-    void start()
+    virtual void start()
     {
         printf("Server listening on port %d\n", server_port);
         // accept connections
-        ACCEPT_THREAD = thread(&cpp_socket_server::accept_loop, this);
+        ACCEPT_THREAD = thread(&cpp_socket_server::_accept_loop, this);
 
         // sending data, recving are detached in the accept thread (just recv from each client and put to queue)
-        SEND_THREAD = thread(&cpp_socket_server::send_loop, this);
+        SEND_THREAD = thread(&cpp_socket_server::_send_loop, this);
     }
 
-    void send_packet(char *data, int size, SOCKET client_socket)
+    virtual void send_packet(char *data, int size, SOCKET client_socket)
     {
         // push data to the packet queue, will be processed by another thread of sending
         char *buffer = new char[size];
@@ -239,9 +222,11 @@ public:
         send_cv.notify_one();
     }
 
-    socket_pkg recv_packet()
+    virtual socket_pkg recv_packet()
     {
+        // try to get one packet form the recv queue
         unique_lock<mutex> lock(recv_mutex);
+        // wait until new data coming and notice, check if the queue is empty or server stopped
         recv_cv.wait(lock, [this]
                      { return !recv_queue.empty() || stop_flag; });
         if (stop_flag && recv_queue.empty())
@@ -251,7 +236,21 @@ public:
         return packet;
     }
 
-    ~cpp_socket_server()
+    virtual void quit()
+    {
+        lock_guard<mutex> lock(connections_list_mutex);
+        for (auto &sock : clients_connections_list)
+        {
+            shutdown(sock, SD_BOTH);
+            closesocket(sock);
+        }
+        clients_connections_list.clear();
+        system("powershell -Command \"& { $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 8000); $client.Close() }\"");
+        ACCEPT_THREAD.join();
+        SEND_THREAD.join();
+    }
+    
+    virtual ~cpp_socket_server()
     {
         stop_flag = true;
         send_cv.notify_all();

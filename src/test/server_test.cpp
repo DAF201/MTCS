@@ -1,13 +1,9 @@
-#include "../network/sockets/tcp_server_socket.h"
+#include "../network/stream_control/MTCS_stream_control.h"
 using namespace std;
-class test_server : cpp_socket_server
-{
-public:
-    test_server(int port) : cpp_socket_server(port) {};
-};
+
 int main()
 {
-    auto s = cpp_socket_server(1024);
+    auto s = MTCS_server_controller_socket(1024);
     s.start();
     while (true)
     {

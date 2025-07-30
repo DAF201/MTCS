@@ -41,14 +41,15 @@ protected:
 
     atomic<bool> stop_flag;
 
-    void SENDING()
+    void send_loop()
     {
         while (!stop_flag)
         {
             unique_lock<mutex> lock(send_mutex);
             send_cv.wait(lock, [this]
                          { return !send_queue.empty() || stop_flag; });
-
+            if (stop_flag)
+                break;
 
             auto pkg = send_queue.front();
             send_queue.pop();
@@ -70,7 +71,7 @@ protected:
         }
     }
 
-    void RECVING()
+    void recv_loop()
     {
         constexpr int BUFFER_SIZE = 1024;
         while (!stop_flag)
@@ -145,8 +146,8 @@ public:
             throw runtime_error("Connect failed");
         }
 
-        RECV_THREAD = thread(&cpp_socket_client::RECVING, this);
-        SEND_THREAD = thread(&cpp_socket_client::SENDING, this);
+        RECV_THREAD = thread(&cpp_socket_client::recv_loop, this);
+        SEND_THREAD = thread(&cpp_socket_client::send_loop, this);
 
         printf("Socket created and connected\n");
     }
@@ -188,7 +189,7 @@ public:
         }
     }
 
-    void S_send(const void *data, int size)
+    void send_packet(const void *data, int size)
     {
         if (size <= 0 || data == nullptr)
             return;
@@ -203,7 +204,7 @@ public:
         send_cv.notify_one();
     }
 
-    socket_pkg S_recv()
+    socket_pkg recv_packet()
     {
         lock_guard<mutex> lock(recv_mutex);
         if (recv_queue.empty())

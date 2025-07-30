@@ -46,7 +46,6 @@ private:
 };
 int main()
 {
-    test_server server(1024);
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::seconds(1));

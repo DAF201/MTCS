@@ -10,7 +10,6 @@
 #include <atomic>
 #include <semaphore>
 #include <algorithm>
-#include "../protocol/MTCS.h"
 #include "socket_setup.h"
 
 #define MAX_CONNECTIONS_COUNT 8
@@ -31,7 +30,7 @@ protected:
     {
         char *data = nullptr;
         int size = 0;
-        SOCKET client_id;
+        SOCKET client_socket;
     };
 
     SOCKET server_listener_socket = INVALID_SOCKET;
@@ -40,6 +39,7 @@ protected:
     int server_port = 0;
 
     thread ACCEPT_THREAD;
+    thread SEND_THREAD;
 
     mutex connections_list_mutex;
     vector<SOCKET> clients_connections_list;
@@ -70,6 +70,36 @@ protected:
         closesocket(sock);
         // release semaphore
         ReleaseSemaphore(connection_sem, 1, NULL);
+    }
+
+    void send_loop()
+    {
+        // sending packet loop
+        while (!stop_flag)
+        {
+            // wait for signal of new packet in queue, then get the front of the queue
+            unique_lock<mutex> lock(send_mutex);
+            send_cv.wait(lock, [this]
+                         { return !send_queue.empty() || stop_flag; });
+            if (stop_flag)
+                break;
+            auto pkg = send_queue.front();
+            send_queue.pop();
+            lock.unlock();
+            // send data
+            int sent = 0;
+            while (sent < pkg.size)
+            {
+                int ret = send(pkg.client_socket, pkg.data + sent, pkg.size - sent, 0);
+                if (ret == SOCKET_ERROR)
+                {
+                    printf("Send error: %d\n", WSAGetLastError());
+                    break;
+                }
+                sent += ret;
+            }
+            delete[] pkg.data;
+        }
     }
 
 public:
@@ -113,8 +143,11 @@ public:
         }
 
         printf("Server listening on port %d\n", server_port);
-        // accept connectionsF
+        // accept connections
         ACCEPT_THREAD = thread(&cpp_socket_server::accept_loop, this);
+
+        // sending data
+        SEND_THREAD = thread(&cpp_socket_server::send_loop, this);
     }
 
     void accept_loop()
@@ -132,9 +165,21 @@ public:
             }
             lock_guard<mutex> lock(connections_list_mutex);
             clients_connections_list.push_back(sock);
-            thread(&cpp_socket_server::connection_handler, this, sock).detach();
+            thread(&cpp_socket_server::_connection_handler, this, sock).detach();
         }
     }
+
+    void send_packet(char *data, int size, SOCKET client_socket)
+    {
+        char *buffer = new char[size];
+        memcpy(buffer, data, size);
+        socket_pkg pkg = {buffer, size, client_socket};
+        unique_lock<mutex> lock(send_mutex);
+        send_queue.push(pkg);
+        lock.unlock();
+        send_cv.notify_one();
+    }
+
     ~cpp_socket_server()
     {
         quit();
@@ -145,5 +190,7 @@ public:
     {
         stop_flag = true;
         system("powershell -Command \"& { $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 8000); $client.Close() }\"");
+        ACCEPT_THREAD.join();
+        SEND_THREAD.join();
     }
 };

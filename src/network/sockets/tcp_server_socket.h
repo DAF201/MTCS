@@ -18,14 +18,14 @@
 
 using namespace std;
 
-// semaphore init
+// semaphore init, make sure at most 8 connections can be accepted at once
 static HANDLE connection_sem = CreateSemaphore(NULL, MAX_CONNECTIONS_COUNT, MAX_CONNECTIONS_COUNT, NULL);
 
+// server super class, may need to inherit later
 class cpp_socket_server
 {
-
 protected:
-    // packet data
+    // packet data, store the client information, data, and size of data
     struct socket_pkg
     {
         char *data = nullptr;
@@ -33,11 +33,13 @@ protected:
         SOCKET client_socket;
     };
 
+    // socket info
     SOCKET server_listener_socket = INVALID_SOCKET;
     WORD sock_version;
     WSADATA WSA_data;
     int server_port = 0;
 
+    // one socket for accept new connection, and one socket for sending the packets
     thread ACCEPT_THREAD;
     thread SEND_THREAD;
 
@@ -55,12 +57,50 @@ protected:
     atomic<bool> stop_flag;
 
     // handler need to be implemented by child class
-    virtual void connection_handler(SOCKET sock) = 0;
+    void connection_handler(SOCKET sock, char *buffer, int size)
+    {
+        // child class can override this part if needed
+        printf("%s\n", buffer);
+        send_packet(buffer, size, sock);
+    };
 
     void _connection_handler(SOCKET sock)
     {
-        // TODO: do something
-        connection_handler(sock);
+        char *buffer = new char[1056];
+        // TODO: do something, must notify recv_cv
+        while (true)
+        {
+            // recv at most 1056 bytes of data at once
+            int size = recv(sock, buffer, 1056, 0);
+            if (size == 0)
+            {
+                printf("Client disconnected\n");
+                break;
+            }
+
+            if (size == SOCKET_ERROR)
+            {
+                printf("Recv error: %d\n", WSAGetLastError());
+                break;
+            }
+
+            {
+                // lock the queue
+                lock_guard<mutex> lock(recv_mutex);
+                // create socket_pkg
+                char *pkg_data = new char[size];
+                memcpy(pkg_data, buffer, size);
+                socket_pkg pkg = {pkg_data, size, sock};
+                // insert to queue
+                recv_queue.push(pkg);
+                // notify one thread waiting
+                recv_cv.notify_one();
+            }
+            // if need to do something else
+            connection_handler(sock, buffer, size);
+        }
+
+        delete[] buffer;
         // complete,remove socket from connection list, disconnected
         lock_guard<mutex>
             lock(connections_list_mutex);
@@ -86,6 +126,7 @@ protected:
             auto pkg = send_queue.front();
             send_queue.pop();
             lock.unlock();
+
             // send data
             int sent = 0;
             while (sent < pkg.size)
@@ -120,10 +161,9 @@ protected:
             thread(&cpp_socket_server::_connection_handler, this, sock).detach();
         }
     }
-    
+
     void quit()
     {
-        stop_flag = true;
         lock_guard<mutex> lock(connections_list_mutex);
         for (auto &sock : clients_connections_list)
         {
@@ -175,17 +215,21 @@ public:
             socket_wsa_end();
             throw runtime_error("Listen failed");
         }
+    }
 
+    void start()
+    {
         printf("Server listening on port %d\n", server_port);
         // accept connections
         ACCEPT_THREAD = thread(&cpp_socket_server::accept_loop, this);
 
-        // sending data
+        // sending data, recving are detached in the accept thread (just recv from each client and put to queue)
         SEND_THREAD = thread(&cpp_socket_server::send_loop, this);
     }
 
     void send_packet(char *data, int size, SOCKET client_socket)
     {
+        // push data to the packet queue, will be processed by another thread of sending
         char *buffer = new char[size];
         memcpy(buffer, data, size);
         socket_pkg pkg = {buffer, size, client_socket};
@@ -195,8 +239,23 @@ public:
         send_cv.notify_one();
     }
 
-    virtual ~cpp_socket_server()
+    socket_pkg recv_packet()
     {
+        unique_lock<mutex> lock(recv_mutex);
+        recv_cv.wait(lock, [this]
+                     { return !recv_queue.empty() || stop_flag; });
+        if (stop_flag && recv_queue.empty())
+            return socket_pkg();
+        socket_pkg packet = recv_queue.front();
+        recv_queue.pop();
+        return packet;
+    }
+
+    ~cpp_socket_server()
+    {
+        stop_flag = true;
+        send_cv.notify_all();
+        recv_cv.notify_all();
         quit();
         socket_wsa_end();
     }

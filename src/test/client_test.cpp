@@ -8,7 +8,7 @@ int main()
     s.send_packet((void *)(test_data), 6);
     std::this_thread::sleep_for(std::chrono::seconds(1));
     MTCS_client_controller_socket::socket_pkg p = s.recv_packet();
-    printf("%s", p.data);
+    printf("%s", p.data.get());
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::seconds(1));

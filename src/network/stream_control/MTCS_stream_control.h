@@ -1,6 +1,6 @@
 #include "../protocol/MTCS.h"
-#include "../sockets/tcp_server_socket.h"
-#include "../sockets/tcp_client_socket.h"
+#include "../sockets/tcp_server_socket_safe.h"
+#include "../sockets/tcp_client_socket_safe.h"
 #define MAX_PACKET_LENGTH 1056
 // this is the TCP controller socket, try to limite the size of data send, use the UDP sockets to transport data
 class MTCS_server_controller_socket : public cpp_tcp_socket_server

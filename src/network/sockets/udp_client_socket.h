@@ -9,3 +9,18 @@
 #include <vector>
 #include <atomic>
 #include "socket_setup.h"
+using namespace std;
+class cpp_udp_socket_client
+{
+protected:
+    struct socket_pkg
+    {
+        char *data = nullptr;
+        int size = 0;
+    };
+
+public:
+    cpp_udp_socket_client()
+    {
+    }
+};

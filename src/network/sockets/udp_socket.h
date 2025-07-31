@@ -26,10 +26,6 @@ protected:
     WSADATA WSA_data;
     int server_port = 0;
 
-    // one socket for recieveing packets, and one socket for sending the packets
-    thread RECV_THREAD;
-    thread SEND_THREAD;
-
     atomic<bool> stop_flag;
 
 public:
@@ -77,6 +73,11 @@ public:
     // this is a point to point UDP, so just let the child class handle the packet logic
     bool send_packet(const char *data, int size, const sockaddr_in &client_address)
     {
+        if (stop_flag)
+        {
+            return false;
+        }
+
         int ret = sendto(server_socket, data, size, 0,
                          reinterpret_cast<const sockaddr *>(&client_address),
                          sizeof(client_address));
@@ -96,6 +97,10 @@ public:
     // recv one packet, since UDP is packet based, and will not mix with the next packet
     socket_pkg recv_packet()
     {
+        if (stop_flag)
+        {
+            return socket_pkg();
+        }
         sockaddr_in client_address{};
         int client_address_length = sizeof(client_address);
         char buffer[MAX_PACKET_LENGTH];
@@ -112,5 +117,23 @@ public:
         memcpy(packet.data.get(), buffer, ret);
         packet.client_addr = client_address;
         return packet;
+    }
+
+    void quit()
+    {
+        string cmd = "powershell -Command \"$udpClient = New-Object System.Net.Sockets.UdpClient; $udpClient.Connect('127.0.0.1'," + to_string(server_port) + "); $bytes = [System.Text.Encoding]::ASCII.GetBytes('exit'); $udpClient.Send($bytes, $bytes.Length); $udpClient.Close()\"";
+        system(cmd.c_str());
+    }
+
+    ~cpp_udp_socket_server()
+    {
+        stop_flag = true;
+        if (server_socket != INVALID_SOCKET)
+        {
+            shutdown(server_socket, SD_BOTH);
+            closesocket(server_socket);
+            server_socket = INVALID_SOCKET;
+        }
+        socket_wsa_end();
     }
 };

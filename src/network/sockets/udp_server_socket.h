@@ -17,8 +17,6 @@ protected:
     {
         unique_ptr<char[]> data;
         int size = 0;
-        // send back data to client
-        SOCKET server_socket;
     };
 
     // socket info
@@ -76,11 +74,11 @@ public:
     }
 
     // this is a point to point UDP, so just let the child class handle the packet logic
-    bool send_packet(const char *data, int size, const sockaddr_in &dest)
+    bool send_packet(const char *data, int size, const sockaddr_in &client_address)
     {
         int ret = sendto(server_socket, data, size, 0,
-                         reinterpret_cast<const sockaddr *>(&dest),
-                         sizeof(dest));
+                         reinterpret_cast<const sockaddr *>(&client_address),
+                         sizeof(client_address));
         if (ret == SOCKET_ERROR)
         {
             printf("sendto failed: %d\n", WSAGetLastError());
@@ -94,8 +92,18 @@ public:
         return true;
     }
 
-    socket_pkg recv_packet()
+    socket_pkg recv_packet(sockaddr_in &client_address)
     {
+        int client_address_length = sizeof(client_address);
         char buffer[MAX_PACKET_LENGTH];
+        int ret = recvfrom(server_socket, buffer, MAX_PACKET_LENGTH, 0, (sockaddr *)&client_address, &client_address_length);
+        if (ret == SOCKET_ERROR)
+        {
+            printf("sendto failed: %d\n", WSAGetLastError());
+            return socket_pkg();
+        }
+        socket_pkg packet = {make_unique<char[]>(ret), ret};
+        memcpy(packet.data.get(), buffer, ret);
+        return packet;
     }
 };

@@ -18,7 +18,6 @@ protected:
     {
         unique_ptr<char[]> data;
         int size = 0;
-        SOCKET server_socket;
     };
 
 public:

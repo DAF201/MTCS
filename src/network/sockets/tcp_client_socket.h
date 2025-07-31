@@ -13,15 +13,17 @@
 
 using namespace std;
 
-class cpp_socket_client
+class cpp_tcp_socket_client
 {
-protected:
+public:
+    // client packet, no need to save server socket since there is just one server
     struct socket_pkg
     {
         char *data = nullptr;
         int size = 0;
     };
 
+protected:
     SOCKET client_socket = INVALID_SOCKET;
     WORD sock_version;
     WSADATA WSA_data;
@@ -111,7 +113,7 @@ protected:
     }
 
 public:
-    cpp_socket_client(const string &server_ip, int server_port)
+    cpp_tcp_socket_client(const string &server_ip, int server_port)
         : stop_flag(false)
     {
         sock_version = MAKEWORD(2, 2);
@@ -146,13 +148,13 @@ public:
             throw runtime_error("Connect failed");
         }
 
-        RECV_THREAD = thread(&cpp_socket_client::recv_loop, this);
-        SEND_THREAD = thread(&cpp_socket_client::send_loop, this);
+        RECV_THREAD = thread(&cpp_tcp_socket_client::recv_loop, this);
+        SEND_THREAD = thread(&cpp_tcp_socket_client::send_loop, this);
 
         printf("Socket created and connected\n");
     }
 
-    ~cpp_socket_client()
+    ~cpp_tcp_socket_client()
     {
         stop_flag = true;
 

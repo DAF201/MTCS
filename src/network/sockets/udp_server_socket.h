@@ -1,0 +1,15 @@
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <stdio.h>
+#include <string>
+#include <thread>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <vector>
+#include <atomic>
+#include "socket_setup.h"
+
+class cpp_UDP_server
+{
+}

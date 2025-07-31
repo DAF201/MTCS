@@ -22,7 +22,7 @@ using namespace std;
 static HANDLE connection_sem = CreateSemaphore(NULL, MAX_CONNECTIONS_COUNT, MAX_CONNECTIONS_COUNT, NULL);
 
 // server super class, may need to inherit later
-class cpp_socket_server
+class cpp_tcp_socket_server
 {
 protected:
     // packet data, store the client information, data, and size of data
@@ -155,12 +155,12 @@ protected:
             }
             lock_guard<mutex> lock(connections_list_mutex);
             clients_connections_list.push_back(sock);
-            thread(&cpp_socket_server::_connection_handler, this, sock).detach();
+            thread(&cpp_tcp_socket_server::_connection_handler, this, sock).detach();
         }
     }
 
 public:
-    cpp_socket_server(const int server_port) : stop_flag(false)
+    cpp_tcp_socket_server(const int server_port) : stop_flag(false)
     {
         sock_version = MAKEWORD(2, 2);
 
@@ -191,7 +191,7 @@ public:
         }
 
         // listen
-        if (listen(server_listener_socket, SOMAXCONN) == SOCKET_ERROR)
+        if (listen(server_listener_socket, MAX_CONNECTIONS_COUNT) == SOCKET_ERROR)
         {
             printf("Listen failed: %d\n", WSAGetLastError());
             closesocket(server_listener_socket);
@@ -204,10 +204,10 @@ public:
     {
         printf("Server listening on port %d\n", server_port);
         // accept connections
-        ACCEPT_THREAD = thread(&cpp_socket_server::_accept_loop, this);
+        ACCEPT_THREAD = thread(&cpp_tcp_socket_server::_accept_loop, this);
 
         // sending data, recving are detached in the accept thread (just recv from each client and put to queue)
-        SEND_THREAD = thread(&cpp_socket_server::_send_loop, this);
+        SEND_THREAD = thread(&cpp_tcp_socket_server::_send_loop, this);
     }
 
     virtual void send_packet(char *data, int size, SOCKET client_socket)
@@ -249,8 +249,8 @@ public:
         ACCEPT_THREAD.join();
         SEND_THREAD.join();
     }
-    
-    virtual ~cpp_socket_server()
+
+    virtual ~cpp_tcp_socket_server()
     {
         stop_flag = true;
         send_cv.notify_all();

@@ -5,6 +5,14 @@
 #include <stdexcept>
 #include <mutex>
 
+#ifndef MAX_CONNECTIONS_COUNT
+#define MAX_CONNECTIONS_COUNT 8
+#endif
+
+#ifndef MAX_PACKET_LENGTH
+#define MAX_PACKET_LENGTH 1056
+#endif
+
 // make sure the WSA only create and destroy once per process
 inline void socket_wsa_start()
 {

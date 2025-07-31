@@ -12,8 +12,6 @@
 #include <algorithm>
 #include "socket_setup.h"
 
-#define MAX_CONNECTIONS_COUNT 8
-
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
@@ -63,12 +61,12 @@ protected:
 
     void _connection_handler(SOCKET sock)
     {
-        char *buffer = new char[1056];
+        char *buffer = new char[MAX_PACKET_LENGTH];
         // TODO: do something, must notify recv_cv
         while (true)
         {
             // recv at most 1056 bytes of data at once
-            int size = recv(sock, buffer, 1056, 0);
+            int size = recv(sock, buffer, MAX_PACKET_LENGTH, 0);
             if (size == 0)
             {
                 printf("Client disconnected\n");

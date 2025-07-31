@@ -9,6 +9,7 @@
 #include <vector>
 #include <atomic>
 #include "socket_setup.h"
+
 #pragma comment(lib, "ws2_32.lib")
 using namespace std;
 
@@ -72,11 +73,10 @@ protected:
 
     void recv_loop()
     {
-        constexpr int BUFFER_SIZE = 1056;
         while (!stop_flag)
         {
-            char buffer[BUFFER_SIZE];
-            int received = recv(client_socket, buffer, BUFFER_SIZE, 0);
+            char buffer[MAX_PACKET_LENGTH];
+            int received = recv(client_socket, buffer, MAX_PACKET_LENGTH, 0);
 
             if (received == 0)
             {

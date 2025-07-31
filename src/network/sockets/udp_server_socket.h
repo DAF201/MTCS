@@ -6,6 +6,7 @@
 #include <queue>
 #include <atomic>
 #include "socket_setup.h"
+
 using namespace std;
 class cpp_udp_socket_server
 {
@@ -14,7 +15,7 @@ protected:
     // packet data, store the client information, data, and size of data
     struct socket_pkg
     {
-        char *data = nullptr;
+        unique_ptr<char[]> data;
         int size = 0;
         // send back data to client
         SOCKET server_socket;
@@ -93,7 +94,8 @@ public:
         return true;
     }
 
-    void recv_packet(char *data, int size)
+    socket_pkg recv_packet()
     {
+        char buffer[MAX_PACKET_LENGTH];
     }
 };

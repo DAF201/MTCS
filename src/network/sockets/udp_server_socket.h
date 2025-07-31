@@ -17,6 +17,7 @@ protected:
     {
         unique_ptr<char[]> data;
         int size = 0;
+        sockaddr_in client_addr;
     };
 
     // socket info
@@ -92,18 +93,24 @@ public:
         return true;
     }
 
-    socket_pkg recv_packet(sockaddr_in &client_address)
+    // recv one packet, since UDP is packet based, and will not mix with the next packet
+    socket_pkg recv_packet()
     {
+        sockaddr_in client_address{};
         int client_address_length = sizeof(client_address);
         char buffer[MAX_PACKET_LENGTH];
-        int ret = recvfrom(server_socket, buffer, MAX_PACKET_LENGTH, 0, (sockaddr *)&client_address, &client_address_length);
+        int ret = recvfrom(server_socket, buffer, MAX_PACKET_LENGTH, 0,
+                           (sockaddr *)&client_address, &client_address_length);
         if (ret == SOCKET_ERROR)
         {
-            printf("sendto failed: %d\n", WSAGetLastError());
+            printf("recvfrom failed: %d\n", WSAGetLastError());
             return socket_pkg();
         }
-        socket_pkg packet = {make_unique<char[]>(ret), ret};
+        socket_pkg packet;
+        packet.size = ret;
+        packet.data = make_unique<char[]>(ret);
         memcpy(packet.data.get(), buffer, ret);
+        packet.client_addr = client_address;
         return packet;
     }
 };

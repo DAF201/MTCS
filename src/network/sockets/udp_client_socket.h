@@ -18,6 +18,7 @@ protected:
     {
         unique_ptr<char[]> data;
         int size = 0;
+        sockaddr_in client_addr;
     };
 
 public:

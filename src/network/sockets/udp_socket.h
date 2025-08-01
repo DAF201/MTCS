@@ -135,7 +135,6 @@ public:
         stop_flag = true;
         if (local_socket != INVALID_SOCKET)
         {
-            shutdown(local_socket, SD_BOTH);
             closesocket(local_socket);
             local_socket = INVALID_SOCKET;
         }

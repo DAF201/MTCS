@@ -55,18 +55,19 @@ protected:
     atomic<bool> stop_flag;
 
     // handler need to be implemented by child class
-    virtual void connection_handler(SOCKET sock, char *buffer, int size) {
-        // child class can override this part if needed
-    };
+    virtual void connection_handler(SOCKET sock, char *buffer, int size) {};
 
+    virtual void pre_connection_handler(SOCKET sock) {};
+    virtual void post_connection_handler(SOCKET sock) {};
     void _connection_handler(SOCKET sock)
     {
-        char *buffer = new char[MAX_PACKET_LENGTH];
+        pre_connection_handler(sock);
+        std::unique_ptr<char[]> buffer = std::make_unique<char[]>(MAX_PACKET_LENGTH);
         // TODO: do something, must notify recv_cv
         while (true)
         {
             // recv at most 1056 bytes of data at once
-            int size = recv(sock, buffer, MAX_PACKET_LENGTH, 0);
+            int size = recv(sock, buffer.get(), MAX_PACKET_LENGTH, 0);
             if (size == 0)
             {
                 printf("Client disconnected\n");
@@ -84,7 +85,7 @@ protected:
                 lock_guard<mutex> lock(recv_mutex);
                 // create socket_pkg
                 unique_ptr<char[]> pkg_data = make_unique<char[]>(size);
-                memcpy(pkg_data.get(), buffer, size);
+                memcpy(pkg_data.get(), buffer.get(), size);
                 socket_pkg pkg = {move(pkg_data), size, sock};
                 // insert to queue
                 recv_queue.push(move(pkg));
@@ -92,10 +93,9 @@ protected:
             // notify one thread waiting
             recv_cv.notify_one();
             // if need to do something else
-            connection_handler(sock, buffer, size);
+            connection_handler(sock, buffer.get(), size);
         }
-
-        delete[] buffer;
+        post_connection_handler(sock);
         // complete,remove socket from connection list, disconnected
         lock_guard<mutex>
             lock(connections_list_mutex);

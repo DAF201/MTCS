@@ -75,8 +75,8 @@ protected:
     {
         while (!stop_flag)
         {
-            char buffer[MAX_PACKET_LENGTH];
-            int received = recv(client_socket, buffer, MAX_PACKET_LENGTH, 0);
+            unique_ptr<char[]> buffer = make_unique<char[]>(MAX_PACKET_LENGTH);
+            int received = recv(client_socket, buffer.get(), MAX_PACKET_LENGTH, 0);
 
             if (received == 0)
             {
@@ -99,7 +99,7 @@ protected:
             else
             {
                 auto data_copy = make_unique<char[]>(received);
-                memcpy(data_copy.get(), buffer, received);
+                memcpy(data_copy.get(), buffer.get(), received);
                 {
                     lock_guard<mutex> lock(recv_mutex);
                     recv_queue.push(socket_pkg{move(data_copy), received});

@@ -3,6 +3,10 @@
 #include "../sockets/tcp_client_socket_safe.h"
 #include "../sockets/udp_socket.h"
 #define MAX_PACKET_LENGTH 1056
+
+const char MTCS_SERVER_HANDSHAKE_1[8] = "MTCSSH1";
+const char MTCS_CLIENT_HANDSHAKE_1[8] = "MTCSCH1";
+
 // this is the TCP controller socket, try to limite the size of data send, use the UDP sockets to transport data
 class MTCS_server_controller_socket : public cpp_tcp_socket_server
 {
@@ -11,15 +15,13 @@ public:
     {
     }
 
+    bool handshake()
+    {
+    }
+
     void start()
     {
         cpp_tcp_socket_server::start();
-    }
-
-    void connection_handler(SOCKET sock, char *buffer, int size) override
-    {
-        printf("%s\n", buffer);
-        send_packet(buffer, size, sock);
     }
 };
 
@@ -31,6 +33,7 @@ public:
     }
 };
 
+// this is the UDP socket, try to use this to transport data, it is faster, conenction less, and cost less resources
 class MTCS_transportation_socket : public cpp_udp_socket
 {
 public:

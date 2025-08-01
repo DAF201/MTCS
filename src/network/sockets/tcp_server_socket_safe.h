@@ -241,12 +241,29 @@ public:
         }
         for (auto &sock : clients_connections_list)
         {
-            shutdown(sock, SD_BOTH);
-            closesocket(sock);
+            if (sock != INVALID_SOCKET)
+            {
+                shutdown(sock, SD_BOTH);
+                closesocket(sock);
+            }
         }
         clients_connections_list.clear();
         string cmd = "powershell -Command \"& { $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', " + to_string(server_port) + "); $client.Close() }\"";
         system(cmd.c_str());
+    }
+
+    // if need to disconnect a connection
+    virtual void disconnect(SOCKET sock)
+    {
+        if (sock != INVALID_SOCKET)
+        {
+            shutdown(sock, SD_BOTH);
+            closesocket(sock);
+            lock_guard<mutex> lock(connections_list_mutex);
+            clients_connections_list.erase(
+                remove(clients_connections_list.begin(), clients_connections_list.end(), sock),
+                clients_connections_list.end());
+        }
     }
 
     virtual ~cpp_tcp_socket_server()

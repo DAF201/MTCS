@@ -81,6 +81,7 @@ public:
         int ret = sendto(local_socket, data, size, 0,
                          reinterpret_cast<const sockaddr *>(&target_address),
                          sizeof(target_address));
+
         if (ret == SOCKET_ERROR)
         {
             printf("sendto failed: %d\n", WSAGetLastError());

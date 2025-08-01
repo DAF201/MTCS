@@ -3,6 +3,7 @@
 #include "../sockets/tcp_client_socket_safe.h"
 #include "../sockets/udp_socket.h"
 #include <random>
+#include <unordered_set>
 #define MAX_PACKET_LENGTH 1056
 using namespace std;
 const char MTCS_SERVER_HANDSHAKE_1[8] = "MTCSSH1";
@@ -13,7 +14,8 @@ class MTCS_server_controller_socket : public cpp_tcp_socket_server
 {
 
 private:
-    static vector<int> stream_id;
+    unordered_set<uint16_t> stream_id_set;
+    uint16_t this_stream_id;
     // save the UDP sockets of server and client address to send to
     vector<MTCS_transportation_socket> server_UDP_sockets;
     vector<sockaddr_in> client_UDP_addresses;
@@ -91,6 +93,7 @@ public:
             return;
         }
 
+        // read the client sockets, create address for them
         for (int i = 0; i < 8; i++)
         {
             sockaddr_in client_UDP_address = {};
@@ -104,6 +107,15 @@ public:
 
         // third handshake, confirm the stream id with client
 
+        // generate a new stream id not being used
+        uint16_t new_stream_id = rand() % 65535;
+        while (stream_id_set.count(new_stream_id))
+        {
+            new_stream_id = rand() % 65535;
+        }
+        stream_id_set.insert(new_stream_id);
+        this_stream_id = new_stream_id;
+
         // end of third handshake
 
         // clear the timeout after handshake
@@ -114,6 +126,11 @@ public:
     void start()
     {
         cpp_tcp_socket_server::start();
+    }
+    ~MTCS_server_controller_socket()
+    {
+        // remove the stream id at closing
+        stream_id_set.erase(this_stream_id);
     }
 };
 
@@ -126,6 +143,7 @@ public:
 // this is the UDP socket, try to use this to transport data, it is faster, conenction less, and cost less resources
 class MTCS_transportation_socket : public cpp_udp_socket
 {
+private:git
 public:
     MTCS_transportation_socket(int port = 0) : cpp_udp_socket(port) {}
 };

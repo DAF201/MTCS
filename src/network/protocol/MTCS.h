@@ -12,7 +12,6 @@
 const uint16_t packet_data_max_length = 1024;
 
 static const char MTCS_identifier[4] = {'M', 'T', 'C', 'S'};
-static const uint8_t packet_max_resent_attempts = 16;
 
 uint16_t data_hash(const char *data, uint16_t length)
 {
@@ -37,10 +36,6 @@ struct MTCS
 
     // 2 bytes stream id
     uint16_t stream_id; // id of the current stream
-    // 1 byte channel id (thread id)
-    uint8_t channel_id;
-    // 1 byte resend attempts, up to
-    uint8_t resend_attempt;
 
     // 4 bytes full data size
     uint32_t stream_packets_count; // number of packets in current packet stream (for one sending, for next sending will need to create a new stream using same socket)
@@ -57,15 +52,17 @@ struct MTCS
     // 4 bytes time stamp
     uint32_t time_stamp; // when was this packet sent
 
-    // 4 bytes reserved space
-    char reserved[4];
+    // 4 bytes service IP to forward to
+    char service_ip[4];
+
+    // 2 bytes service port to forward to
+    uint16_t service_port;
 
     // total 32 bytes header
 };
 
-std::vector<char> MTCS_serialize(uint16_t source_port, uint16_t target_port, uint16_t stream_id, uint8_t channel_id,
-                                 uint8_t resend_attempt, uint32_t stream_packets_count, uint16_t packet_data_length,
-                                 uint32_t packet_index, uint32_t time_stamp, const char *packet_data)
+std::vector<char> MTCS_serialize(uint16_t source_port, uint16_t target_port, uint16_t stream_id, uint32_t stream_packets_count, uint16_t packet_data_length,
+                                 uint32_t packet_index, uint32_t time_stamp, char *service_ip, uint16_t service_port, const char *packet_data)
 {
 
     if (packet_data_length >= packet_data_max_length)
@@ -74,17 +71,12 @@ std::vector<char> MTCS_serialize(uint16_t source_port, uint16_t target_port, uin
     if (packet_index > stream_packets_count - 1)
         throw std::runtime_error("data length excessing stream max size");
 
-    if (resend_attempt > packet_max_resent_attempts)
-        throw std::runtime_error("data reached max resent attempts");
-
     std::vector<char> res = std::vector<char>(sizeof(MTCS) + packet_data_length);
     MTCS header;
     memcpy((void *)header.identifier, MTCS_identifier, sizeof(MTCS_identifier));
     header.source_port = source_port;
     header.target_port = target_port;
     header.stream_id = stream_id;
-    header.channel_id = channel_id;
-    header.resend_attempt = resend_attempt;
     header.stream_packets_count = stream_packets_count;
     header.packet_data_hash = data_hash(packet_data, packet_data_length);
     header.packet_data_length = packet_data_length;
@@ -104,7 +96,7 @@ std::vector<char> MTCS_copy(const char *MTCS_packet, uint16_t MTCS_packet_length
 }
 
 // get the header from char vector
-MTCS MTCS_header_extract(std::vector<char> MTCS_packet)
+MTCS MTCS_header_extract(std::vector<char> &MTCS_packet)
 {
     MTCS header;
     memcpy(&header, MTCS_packet.data(), sizeof(MTCS));
@@ -125,19 +117,23 @@ int MTCS_parse(std::vector<char> MTCS_packet, char *data_buffer)
     uint32_t packet_index = header.packet_index;
 
     // shows the packet data is larger than 1024 bytes
-    if ((packet_data_length > packet_data_max_length) || (header.resend_attempt > packet_max_resent_attempts) || (packet_index > header.stream_packets_count - 1))
+    if ((packet_data_length > packet_data_max_length) || (packet_index > header.stream_packets_count - 1))
         return 1;
 
+    // data size not matching
     if (MTCS_packet.size() - sizeof(MTCS) != header.packet_data_length)
         return 2;
 
+    // ID not match
     if (memcmp(header.identifier, MTCS_identifier, sizeof(MTCS_identifier)) != 0)
         return 3;
 
+    // data hash not match
     const char *packet_data_ptr = MTCS_packet.data() + sizeof(MTCS);
     if (data_hash(packet_data_ptr, packet_data_length) != header.packet_data_hash)
         return 4;
 
+    // all correct, copy data
     memcpy(data_buffer + packet_index * packet_data_max_length, packet_data_ptr, packet_data_length);
 
     return 0;

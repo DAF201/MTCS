@@ -4,7 +4,7 @@
 #include <winsock2.h>
 #include <stdexcept>
 #include <mutex>
-
+#include <string>
 #ifndef MAX_CONNECTIONS_COUNT
 #define MAX_CONNECTIONS_COUNT 8
 #endif
@@ -43,4 +43,15 @@ inline void socket_wsa_end()
     started = false;
 }
 
+sockaddr_in get_peer_address(SOCKET sock)
+{
+    sockaddr_in addr = {};
+    socklen_t addr_len = sizeof(addr);
+    if (getpeername(sock, (sockaddr *)&addr, &addr_len) != 0)
+    {
+        printf("getpeername failed: %d\n", WSAGetLastError());
+        addr.sin_family = AF_UNSPEC;
+    }
+    return addr;
+}
 #endif

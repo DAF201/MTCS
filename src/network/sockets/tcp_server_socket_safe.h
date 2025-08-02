@@ -57,11 +57,22 @@ protected:
     // handler need to be implemented by child class
     virtual void connection_handler(SOCKET sock, char *buffer, int size) {};
 
-    virtual void pre_connection_handler(SOCKET sock) {};
+    virtual bool pre_connection_handler(SOCKET sock) { return true; };
     virtual void post_connection_handler(SOCKET sock) {};
     void _connection_handler(SOCKET sock)
     {
-        pre_connection_handler(sock);
+        if (pre_connection_handler(sock) == false)
+        {
+            lock_guard<mutex>
+                lock(connections_list_mutex);
+            auto client_socket = std::find(clients_connections_list.begin(), clients_connections_list.end(), sock);
+            if (client_socket != clients_connections_list.end())
+                clients_connections_list.erase(client_socket);
+            closesocket(sock);
+            // release semaphore
+            ReleaseSemaphore(connection_sem, 1, NULL);
+            return;
+        }
         std::unique_ptr<char[]> buffer = std::make_unique<char[]>(MAX_PACKET_LENGTH);
         // TODO: do something, must notify recv_cv
         while (true)
@@ -220,10 +231,10 @@ public:
 
     virtual socket_pkg recv_packet()
     {
-        // try to get one packet form the recv queue
         unique_lock<mutex> lock(recv_mutex);
-        // wait until new data coming and notice, check if the queue is empty or server stopped
-        if (stop_flag || recv_queue.empty())
+        recv_cv.wait(lock, [this]
+                     { return !recv_queue.empty() || stop_flag; });
+        if (recv_queue.empty())
             return socket_pkg();
         socket_pkg packet = move(recv_queue.front());
         recv_queue.pop();

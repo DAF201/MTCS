@@ -14,7 +14,7 @@ class MTCS_server_controller_socket : public cpp_tcp_socket_server
 {
 
 private:
-    unordered_set<uint16_t> stream_id_set;
+    static unordered_set<uint16_t> stream_id_set;
     uint16_t this_stream_id;
     // save the UDP sockets of server and client address to send to
     vector<MTCS_transportation_socket> server_UDP_sockets;
@@ -23,43 +23,40 @@ private:
 public:
     MTCS_server_controller_socket(int port) : cpp_tcp_socket_server(port) {}
 
-    void pre_connection_handler(SOCKET sock)
+    bool pre_connection_handler(SOCKET sock)
     {
-        // first handshake, confirm the client can send and understand the handshake
         // 3 seconds timeout
         DWORD timeout_ms = 3000;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms));
+
+        // first handshake, confirm the client can send and understand the handshake
 
         unique_ptr<char[]> buffer = make_unique<char[]>(MAX_PACKET_LENGTH);
         int ret = recv(sock, buffer.get(), 8, MSG_WAITALL);
         if (ret == 0)
         {
             printf("First Handshake recv empty data\n");
-            disconnect(sock);
-            return;
+            return false;
         }
         if (ret == SOCKET_ERROR)
         {
             printf("First Handshake recv error\n");
-            disconnect(sock);
-            return;
+            return false;
         }
         if (ret < 8 || memcmp(buffer.get(), MTCS_CLIENT_HANDSHAKE_1, 8) != 0)
         {
             // disconnect if the handshake failed
             printf("First Handshake data not match\n");
-            disconnect(sock);
-            return;
+            return false;
         }
 
         memcpy(buffer.get(), MTCS_SERVER_HANDSHAKE_1, 8);
 
-        ret = recv(sock, buffer.get(), 8, MSG_WAITALL);
+        ret = send(sock, buffer.get(), 8, MSG_WAITALL);
         if (ret == SOCKET_ERROR)
         {
             printf("First Handshake send error\n");
-            disconnect(sock);
-            return;
+            return false;
         }
 
         // end of the first handshake
@@ -80,17 +77,15 @@ public:
         if (ret == SOCKET_ERROR)
         {
             printf("Second Handshake send error\n");
-            disconnect(sock);
-            return;
+            return false;
         }
 
         // recv the client's response about which ports it is going to use
         ret = recv(sock, (char *)ports_buffer, sizeof(ports_buffer), 0);
         if (ret != sizeof(ports_buffer))
         {
-            printf("Second Handshake send error\n");
-            disconnect(sock);
-            return;
+            printf("Second Handshake recv error\n");
+            return false;
         }
 
         // read the client sockets, create address for them
@@ -115,18 +110,32 @@ public:
         }
         stream_id_set.insert(new_stream_id);
         this_stream_id = new_stream_id;
-
+        ret = send(sock, (char *)&this_stream_id, sizeof(this_stream_id), 0);
+        if (ret == SOCKET_ERROR)
+        {
+            printf("Third Handshake send error\n");
+            return false;
+        }
+        uint16_t stream_id_buffer;
+        ret = recv(sock, (char *)&stream_id_buffer, sizeof(stream_id_buffer), 0);
+        if (stream_id_buffer != this_stream_id)
+        {
+            printf("Third Handshake stream id not match\n");
+            return false;
+        }
         // end of third handshake
 
         // clear the timeout after handshake
         timeout_ms = 0;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms));
+        return true;
     }
 
     void start()
     {
         cpp_tcp_socket_server::start();
     }
+
     ~MTCS_server_controller_socket()
     {
         // remove the stream id at closing
@@ -136,14 +145,111 @@ public:
 
 class MTCS_client_controller_socket : public cpp_tcp_socket_client
 {
+private:
+    uint16_t this_stream_id;
+    // save the UDP sockets of server and client address to send to
+    vector<MTCS_transportation_socket> client_UDP_sockets;
+    vector<sockaddr_in> server_UDP_addresses;
+    bool handshake()
+    {
+        // 3 seconds timeout
+        DWORD timeout_ms = 3000;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms));
+
+        // first handshake, confirm the server can send and can understant the handshake
+        unique_ptr<char[]> buffer = make_unique<char[]>(MAX_PACKET_LENGTH);
+        memcpy(buffer.get(), MTCS_SERVER_HANDSHAKE_1, 8);
+
+        // send first handshake to server
+        int ret = send(sock, buffer.get(), 8, MSG_WAITALL);
+        if (ret == SOCKET_ERROR)
+        {
+            printf("First Handshake send error\n");
+            return false;
+        }
+        ret = recv(sock, buffer.get(), 8, MSG_WAITALL);
+        if (ret == 0)
+        {
+            printf("First Handshake recv empty data\n");
+            return false;
+        }
+        if (ret == SOCKET_ERROR)
+        {
+            printf("First Handshake recv error\n");
+            return false;
+        }
+        if (ret < 8 || memcmp(buffer.get(), MTCS_SERVER_HANDSHAKE_1, 8) != 0)
+        {
+            // disconnect if the handshake failed
+            printf("First Handshake data not match\n");
+            return false;
+        }
+        // end of the first handshake
+
+        // second handshake, check the ports with server (create 8 udp ports here)
+
+        // create UDP sockets, and get ports to server
+        int ports_buffer[8];
+
+        // recv the ports server is going to use the in buffer, when reply server with ports going to use
+        ret = recv(sock, (char *)ports_buffer, sizeof(ports_buffer), 0);
+        if (ret != sizeof(ports_buffer))
+        {
+            printf("Second Handshake recv error\n");
+            return false;
+        }
+
+        // read the server sockets, create address for them
+        for (int i = 0; i < 8; i++)
+        {
+            sockaddr_in server_UDP_addresse = {};
+            server_UDP_addresse.sin_family = AF_INET;
+            server_UDP_addresse.sin_port = htons(ports_buffer[i]);
+            server_UDP_addresse.sin_addr = get_peer_address(sock).sin_addr;
+            server_UDP_addresses.push_back(server_UDP_addresse);
+        }
+
+        // create 8 UDP sockets, get the ports
+        for (int i = 0; i < 8; i++)
+        {
+            MTCS_transportation_socket s = MTCS_transportation_socket();
+            client_UDP_sockets.push_back(s);
+            ports_buffer[i] = s.get_port();
+        }
+
+        ret = send(sock, (char *)ports_buffer, sizeof(ports_buffer), 0);
+        if (ret == SOCKET_ERROR)
+        {
+            printf("Second Handshake send error\n");
+            return false;
+        }
+
+        // end of the second handshake
+    }
+
 public:
-    MTCS_client_controller_socket(string server_ip, int server_port) : cpp_tcp_socket_client(server_ip, server_port) {}
+    MTCS_client_controller_socket(string server_ip, int server_port) : cpp_tcp_socket_client(server_ip, server_port)
+    {
+        if (handshake() == false)
+        {
+            stop_flag = true;
+            quit();
+            closesocket(sock);
+            return;
+        }
+    }
 };
 
 // this is the UDP socket, try to use this to transport data, it is faster, conenction less, and cost less resources
 class MTCS_transportation_socket : public cpp_udp_socket
 {
-private:git
+
 public:
-    MTCS_transportation_socket(int port = 0) : cpp_udp_socket(port) {}
+    MTCS_transportation_socket(int port = 0) : cpp_udp_socket(port)
+    {
+    }
+};
+
+class MTCS_main_socket
+{
 };

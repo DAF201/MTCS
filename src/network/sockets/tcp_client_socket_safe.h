@@ -24,7 +24,7 @@ public:
     };
 
 protected:
-    SOCKET client_socket = INVALID_SOCKET;
+    SOCKET sock = INVALID_SOCKET;
     WORD sock_version;
     WSADATA WSA_data;
     sockaddr_in server_address;
@@ -60,7 +60,7 @@ protected:
             int sent = 0;
             while (sent < pkg.size)
             {
-                int ret = send(client_socket, pkg.data.get() + sent, pkg.size - sent, 0);
+                int ret = send(sock, pkg.data.get() + sent, pkg.size - sent, 0);
                 if (ret == SOCKET_ERROR)
                 {
                     printf("Send error: %d\n", WSAGetLastError());
@@ -76,7 +76,7 @@ protected:
         while (!stop_flag)
         {
             unique_ptr<char[]> buffer = make_unique<char[]>(MAX_PACKET_LENGTH);
-            int received = recv(client_socket, buffer.get(), MAX_PACKET_LENGTH, 0);
+            int received = recv(sock, buffer.get(), MAX_PACKET_LENGTH, 0);
 
             if (received == 0)
             {
@@ -117,8 +117,8 @@ public:
 
         socket_wsa_start();
 
-        client_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (client_socket == INVALID_SOCKET)
+        sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (sock == INVALID_SOCKET)
         {
             printf("Error creating socket\n");
             socket_wsa_end();
@@ -132,15 +132,15 @@ public:
         if (inet_pton(AF_INET, server_ip.c_str(), &server_address.sin_addr) != 1)
         {
             printf("Invalid IP address format\n");
-            closesocket(client_socket);
+            closesocket(sock);
             socket_wsa_end();
             throw runtime_error("Invalid IP");
         }
 
-        if (connect(client_socket, (sockaddr *)&server_address, sizeof(server_address)) == SOCKET_ERROR)
+        if (connect(sock, (sockaddr *)&server_address, sizeof(server_address)) == SOCKET_ERROR)
         {
             printf("Connect error\n");
-            closesocket(client_socket);
+            closesocket(sock);
             socket_wsa_end();
             throw runtime_error("Connect failed");
         }
@@ -164,8 +164,8 @@ public:
         if (RECV_THREAD.joinable())
             RECV_THREAD.join();
 
-        if (client_socket != INVALID_SOCKET)
-            closesocket(client_socket);
+        if (sock != INVALID_SOCKET)
+            closesocket(sock);
 
         socket_wsa_end();
 
@@ -231,10 +231,10 @@ public:
         {
             send_queue.pop();
         }
-        if (client_socket != INVALID_SOCKET)
+        if (sock != INVALID_SOCKET)
         {
-            closesocket(client_socket);
-            client_socket = INVALID_SOCKET;
+            closesocket(sock);
+            sock = INVALID_SOCKET;
         }
     }
 };

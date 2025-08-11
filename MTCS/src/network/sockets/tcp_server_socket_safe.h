@@ -59,11 +59,6 @@ protected:
     // handler need to be implemented by child class
     virtual bool pre_connection_handler(SOCKET sock) { return true; };
     virtual void connection_handler(SOCKET sock, char *buffer, int size) {};
-<<<<<<< HEAD
-=======
-
-    virtual bool pre_connection_handler(SOCKET sock) { return true; };
->>>>>>> 0f3eda0456ec119875b90f5fbd3d68d74011323c
     virtual void post_connection_handler(SOCKET sock) {};
     void _connection_handler(SOCKET sock)
     {
@@ -79,6 +74,7 @@ protected:
             ReleaseSemaphore(connection_sem, 1, NULL);
             return;
         }
+        
         std::unique_ptr<char[]> buffer = std::make_unique<char[]>(MAX_PACKET_LENGTH);
         // TODO: do something, must notify recv_cv
         while (true)
@@ -224,7 +220,7 @@ public:
         SEND_THREAD = thread(&cpp_tcp_socket_server::_send_loop, this);
     }
 
-    virtual void send_packet(char *data, int size, SOCKET client_socket)
+    virtual void send_packet(const char *data, int size, SOCKET client_socket)
     {
         // push data to the packet queue, will be processed by another thread of sending
         unique_ptr<char[]> buffer = make_unique<char[]>(size);

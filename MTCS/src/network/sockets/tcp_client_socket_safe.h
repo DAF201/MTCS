@@ -147,10 +147,14 @@ public:
             throw runtime_error("Connect failed");
         }
 
+        printf("Socket created and connected\n");
+    }
+
+    // only start the loops after the handshakes, otherwise it will interrupt the handshake
+    void start()
+    {
         RECV_THREAD = thread(&cpp_tcp_socket_client::recv_loop, this);
         SEND_THREAD = thread(&cpp_tcp_socket_client::send_loop, this);
-
-        printf("Socket created and connected\n");
     }
 
     ~cpp_tcp_socket_client()

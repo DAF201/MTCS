@@ -1,4 +1,0 @@
-#ifndef MTCS_TRANSPORT_SOCKET_HPP
-#define MTCS_TRANSPORT_SOCKET_HPP
-
-#endif

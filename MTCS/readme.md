@@ -1,1 +1,0 @@
-need to make a parallel transmit protocol that can send in multiple threads, and recieve/rebuild data from different sockets
